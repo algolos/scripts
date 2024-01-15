@@ -1,0 +1,2 @@
+# scripts
+Solutions for administration
