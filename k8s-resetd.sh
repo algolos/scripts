@@ -1,0 +1,25 @@
+kubeadm reset -f;
+nerdctl rm -f $(nerdctl ps -a -q) 2>/dev/null;
+rm -rf /etc/cni/*;
+rm -rf /etc/containerd/*;
+systemctl stop kubelet;
+systemctl stop containerd;
+systemctl stop docker;
+rm /root/.kube/config;
+kill $(ps ax | grep containerd-shim | grep -v grep |awk '{print $1}');
+for i in $(mount -t tmpfs | grep /var/lib/kubelet | cut -d " " -f3); do umount $i ; done
+rm -rf /etc/kubernetes;
+rm -rf /var/lib/kubelet;
+rm -rf /var/lib/docker;
+rm -rf /var/lib/containerd;
+rm -rf /etc/cni;
+rm -rf /etc/keepalived;
+rm -rf /etc/haproxy;
+rm -rf /var/lib/etcd;
+iptables -F && iptables -t nat -F && iptables -t mangle -F && iptables -X;
+ip link set cni0 down;
+ip link set flannel.1 down;
+ip link set docker0 down;
+ip link delete cni0;
+ip link delete flannel.1;
+reboot;
