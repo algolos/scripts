@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: py-proxy-service
+  namespace: edo
+  labels:
+    app: py-proxy-service
+spec:
+  selector:
+    matchLabels:
+      app: py-proxy-service
+  template:
+    metadata:
+      labels:
+        app: py-proxy-service
+    spec:
+      volumes:
+        - name: py-proxy-service
+          configMap:
+            name: py-proxy-service
+            defaultMode: 0755
+      containers:
+        - name: py-proxy-service
+          image: python:3.9.19-slim-bullseye
+          imagePullPolicy: IfNotPresent
+          command: 
+           - "python"
+          args:
+           - "/root/py-server.py"
+          ports:
+            - containerPort: 8080
+              protocol: TCP
+          resources:
+            limits:
+              cpu: 200m
+              memory: 200Mi
+            requests:
+              cpu: 100m
+              memory: 100Mi
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: py-proxy-service
+              mountPath: /root/py-server.py
+              subPath: py-server.py
+          
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: py-proxy-service
+  name: py-proxy-service
+  namespace: gitlab-sync
+spec:
+  ports:
+    - name: tcp
+      port: 8080
+      targetPort: 8080
+  type: LoadBalancer
+  externalIPs:
+    - 10.116.41.144
+  selector:
+    app: py-proxy-service
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: py-proxy-service
+  labels:
+    app: py-proxy-service
+data:
+  py-server.py: |-
+    import socket
+
+
+    # Define socket host and port
+    SERVER_HOST = '0.0.0.0'
+    SERVER_PORT = 8080
+
+    # Create socket
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server_socket.bind((SERVER_HOST, SERVER_PORT))
+    server_socket.listen(1)
+    print('Listening on port %s ...' % SERVER_PORT)
+
+    while True:    
+        # Wait for client connections
+        client_connection, client_address = server_socket.accept()
+
+        # Get the client request
+        request = client_connection.recv(1024).decode()
+        print(request)
+
+        # Send HTTP response
+        response = 'HTTP/1.0 200 OK\n\nHello World'
+        client_connection.sendall(response.encode())
+        client_connection.close()
+
+    # Close socket
+    server_socket.close()
