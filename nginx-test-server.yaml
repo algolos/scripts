@@ -1,0 +1,131 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: test-proxy-service
+  namespace: edo
+  labels:
+    app: test-proxy-service
+spec:
+  selector:
+    matchLabels:
+      app: test-proxy-service
+  template:
+    metadata:
+      labels:
+        app: test-proxy-service
+    spec:
+      volumes:
+        - name: test-proxy-service
+          configMap:
+            name: test-proxy-service
+            defaultMode: 0755
+      containers:
+        - name: nginx
+          image: nginx:1.20.1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          resources:
+            limits:
+              cpu: 500m
+              memory: 200Mi
+            requests:
+              cpu: 100m
+              memory: 85Mi
+          securityContext:
+            allowPrivilegeEscalation: true
+            runAsNonRoot: true
+          volumeMounts:
+            - name: test-proxy-service
+              mountPath: /etc/nginx/nginx.conf
+              subPath: nginx.conf
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    app: test-proxy-service
+  name: test-proxy-service
+  namespace: edo
+spec:
+  ports:
+    - name: tcp
+      port: 5080
+      targetPort: 8080
+  type: LoadBalancer
+  externalIPs:
+    - 10.116.41.144
+  selector:
+    app: test-proxy-service
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: test-proxy-service
+  labels:
+    app: test-proxy-service
+data:
+  nginx.conf: |-
+    user  nginx;
+    worker_processes  auto;
+    
+    error_log  /var/log/nginx/error.log notice;
+    pid        /var/run/nginx.pid;
+    
+    
+    events {
+        worker_connections  1024;
+    }
+    
+    
+    http {
+        include       /etc/nginx/mime.types;
+        default_type  application/octet-stream;
+    
+        log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                          '$status $body_bytes_sent "$http_referer" '
+                          '"$http_user_agent" "$http_x_forwarded_for"';
+    
+        access_log  /var/log/nginx/access.log  main;
+    
+        sendfile        on;
+        #tcp_nopush     on;
+    
+        keepalive_timeout  65;
+    
+        #gzip  on;
+    
+        #include /etc/nginx/conf.d/*.conf;
+        
+        
+        server {
+                listen 8080;
+                server_name _; 
+                
+                proxy_read_timeout 300;
+                proxy_connect_timeout 300;
+                proxy_send_timeout 300;
+
+            location / {
+                 client_max_body_size 0;
+                 gzip off;
+                 proxy_read_timeout      300;
+                 proxy_connect_timeout   300;
+                 proxy_redirect          off;
+                 proxy_http_version 1.1;
+                 proxy_set_header    Host                $http_host;
+                 proxy_set_header    X-Real-IP           $remote_addr;
+                 proxy_set_header    X-Forwarded-Ssl     on;
+                 proxy_set_header    X-Forwarded-For     $proxy_add_x_forwarded_for;
+                 proxy_set_header    X-Forwarded-Proto   $scheme;
+                
+                 proxy_pass http://py-proxy-service:8080;
+                 proxy_ssl_server_name on;
+            }
+        }
+    
+    }
+ 
+ 
+ 
